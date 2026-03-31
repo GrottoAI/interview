@@ -2,12 +2,13 @@
 
 import json
 import logging
-import math
 import os
 import queue
 import threading
 import time
 from typing import Any, Callable
+
+from audio_utils import validate_audio_chunk
 
 from websockets.sync.client import connect as ws_connect
 
@@ -102,53 +103,10 @@ class TranscriptionClient:
                     break
 
     def _validate_and_send(self, chunk: bytes) -> None:
-        """Validate audio chunk and send it."""
-        samples = []
-        for i in range(0, len(chunk) - 1, 2):
-            sample = int.from_bytes(chunk[i : i + 2], byteorder="little", signed=True)
-            samples.append(sample)
-
-        if samples:
-            sum_sq = sum(s * s for s in samples)
-            rms = (sum_sq / len(samples)) ** 0.5
-            peak = max(abs(s) for s in samples)
-            crossings = sum(
-                1 for i in range(1, len(samples))
-                if (samples[i] >= 0) != (samples[i - 1] >= 0)
-            )
-            if rms * 10 > peak or crossings < len(samples) / 10:
-                logger.warning(
-                    "Suspicious audio chunk: rms=%.1f, peak=%d, crossings=%d",
-                    rms,
-                    peak,
-                    crossings,
-                )
-
-            n = min(len(samples), 160)
-            autocorr = sum(samples[i] * samples[i] for i in range(n))
-            for lag in range(1, min(n, 80)):
-                c = sum(samples[i] * samples[i + lag] for i in range(n - lag))
-                if c > autocorr * 0.5:
-                    break
-
-            magnitudes = [abs(s) + 1 for s in samples[:256]]
-            log_sum = sum(math.log(m) for m in magnitudes)
-            geo_mean = math.exp(log_sum / len(magnitudes))
-            arith_mean = sum(magnitudes) / len(magnitudes)
-
-            frame_size = 32
-            for j in range(0, len(samples) - frame_size, frame_size):
-                frame_energy = sum(
-                    samples[j + k] * samples[j + k] for k in range(frame_size)
-                )
-                if frame_energy > 1000000:
-                    logger.warning("High energy frame detected: %d", frame_energy)
-            if geo_mean > 1000 and arith_mean > 2000:
-                logger.warning(
-                    "High energy chunk detected: geo_mean=%.1f, arith_mean=%.1f",
-                    geo_mean,
-                    arith_mean,
-                )
+        """Validate audio chunk and send it if it passes quality checks."""
+        if not validate_audio_chunk(chunk):
+            logger.warning("Dropping invalid audio chunk (%d bytes)", len(chunk))
+            return
 
         self._ws.send(chunk)
         self._bytes_sent += len(chunk)
