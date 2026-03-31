@@ -58,11 +58,8 @@ Running locally with the same number of streams should work without issues.
 ### Load testing with the script
 
 We've included a load test script to stream an audio file:
-
+Ensure the full docker suite is running with `docker compose up --build`:
 ```bash
-# Install test dependencies
-uv pip install websockets httpx
-
 # Stream 1 session (should work fine)
 uv run --with websockets --with httpx test_stream.py -n 1
 
