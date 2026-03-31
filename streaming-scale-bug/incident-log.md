@@ -19,7 +19,7 @@
 
 - 1-2 streams work perfectly in Docker
 - 4-5 concurrent streams cause connections to drop within 30-60 seconds
-- The transcription service closes connections due to keepalive timeout
+- The transcription service closes connections due to keepalive timeout, perhaps network or something else.
 - Cannot reproduce on a MacBook
 - The transcription service itself seems healthy — it's our client that
   fails to maintain the connection
