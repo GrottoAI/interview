@@ -10,12 +10,10 @@ concurrent transcription streams.
 ## The Problem
 
 The service works well with 1-2 concurrent streams. When running 4-5+
-concurrent streams in our production environment (resource-constrained
-containers), transcription connections start dropping — the transcription
-service closes connections due to keepalive timeouts.
+concurrent streams in our production environment, transcription connections start dropping — the transcription
+service stops returning transcripts.
 
-The issue does **not** occur when running on a developer MacBook with
-full resources. It only manifests in the containerized environment.
+The issue does **not** occur when running on a developer MacBook. It only manifests in the containerized environment.
 
 **Your task: diagnose the root cause and implement a fix.**
 
@@ -55,13 +53,11 @@ uv sync
 REDIS_URL=redis://localhost:16379 TRANSCRIBER_URL=ws://localhost:9001 uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-Running locally with the same number of streams should work without issues,
-since your machine has full CPU resources.
+Running locally with the same number of streams should work without issues.
 
 ### Load testing with the script
 
-Instead of manually adding streams in the browser, you can use the
-included load test script to stream an audio file:
+We've included a load test script to stream an audio file:
 
 ```bash
 # Install test dependencies
