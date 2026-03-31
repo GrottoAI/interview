@@ -1,0 +1,25 @@
+services:
+  app:
+    build: ./app
+    cpus: "0.25"
+    mem_limit: 512m
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - TRANSCRIBER_URL=ws://transcriber:9001
+    depends_on:
+      - redis
+      - transcriber
+
+  transcriber:
+    build: ./transcriber
+    ports:
+      - "9001:9001"
+    environment:
+      - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY}
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "16379:6379"

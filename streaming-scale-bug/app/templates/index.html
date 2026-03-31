@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamCo Live Transcription</title>
+    <style>
+        :root {
+            --bg-primary: #0f1117;
+            --bg-secondary: #1a1d27;
+            --bg-tertiary: #252836;
+            --text-primary: #e4e6eb;
+            --text-secondary: #8b8fa3;
+            --text-muted: #5c5f73;
+            --accent: #6c63ff;
+            --accent-dim: #4a44b3;
+            --green: #34d399;
+            --yellow: #fbbf24;
+            --red: #f87171;
+            --border: #2d3044;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 0 20px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .header h1 { font-size: 15px; font-weight: 600; }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .health-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            background: var(--bg-tertiary);
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .health-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--text-muted);
+            transition: background 0.3s;
+        }
+        .health-dot.good { background: var(--green); }
+        .health-dot.warning { background: var(--yellow); animation: pulse 1.5s infinite; }
+        .health-dot.critical { background: var(--red); animation: pulse 0.8s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-dim); }
+        .btn-danger { background: var(--red); color: white; }
+        .btn-danger:hover { background: #e05555; }
+        .btn-sm { padding: 4px 10px; font-size: 11px; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Main layout */
+        .main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Streams grid */
+        .streams-area {
+            flex: 1;
+            padding: 12px;
+            overflow-y: auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-content: flex-start;
+        }
+
+        .stream-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            min-width: 300px;
+            max-width: 600px;
+            flex: 1 1 300px;
+            display: flex;
+            flex-direction: column;
+            max-height: 350px;
+        }
+
+        .stream-header {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .stream-header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stream-title {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .stream-status {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+        }
+        .stream-status.active { background: rgba(52,211,153,0.15); color: var(--green); }
+        .stream-status.error { background: rgba(248,113,113,0.15); color: var(--red); }
+
+        .stream-stats {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .stream-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 12px;
+        }
+
+        .stream-body::-webkit-scrollbar { width: 4px; }
+        .stream-body::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 2px; }
+
+        .utterance {
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            border-radius: 5px;
+            background: var(--bg-tertiary);
+            border-left: 2px solid var(--accent-dim);
+            font-size: 13px;
+            line-height: 1.5;
+            animation: fadeIn 0.2s ease-out;
+        }
+        .utterance.final { border-left-color: var(--accent); }
+        .utterance.interim { opacity: 0.6; border-left-color: var(--text-muted); }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .utterance-meta {
+            font-size: 9px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            color: var(--text-muted);
+            font-size: 13px;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar h3 {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            padding: 3px 0;
+        }
+        .stat-label { color: var(--text-secondary); }
+        .stat-value { color: var(--text-primary); font-weight: 600; }
+        .stat-value.good { color: var(--green); }
+        .stat-value.warning { color: var(--yellow); }
+        .stat-value.critical { color: var(--red); }
+
+        .latency-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 1px;
+            height: 32px;
+        }
+        .latency-bar {
+            flex: 1;
+            min-width: 2px;
+            border-radius: 1px 1px 0 0;
+            transition: height 0.2s;
+        }
+        .latency-bar.good { background: var(--green); }
+        .latency-bar.warning { background: var(--yellow); }
+        .latency-bar.critical { background: var(--red); }
+
+        .debug-toggle {
+            font-size: 10px;
+            color: var(--text-muted);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .debug-panel {
+            display: none;
+            font-size: 9px;
+            background: var(--bg-tertiary);
+            padding: 6px 8px;
+            border-radius: 4px;
+            color: var(--text-muted);
+            white-space: pre;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .debug-panel.visible { display: block; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>StreamCo Live Transcription</h1>
+        <div class="header-controls">
+            <div class="health-bar">
+                <div class="health-dot" id="healthDot"></div>
+                <span id="healthText">Idle</span>
+            </div>
+            <button class="btn btn-primary" id="addStreamBtn" onclick="addStream()">
+                + Add Stream
+            </button>
+            <button class="btn btn-danger btn-sm" id="stopAllBtn" onclick="stopAll()" disabled>
+                Stop All
+            </button>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="streams-area" id="streamsArea">
+            <div class="empty-state" id="emptyState">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+                <div>Click <strong>+ Add Stream</strong> to start a transcription session</div>
+                <div style="font-size: 11px;">Each stream captures from your mic independently</div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div>
+                <h3>System</h3>
+                <div class="stat-row">
+                    <span class="stat-label">Active Streams</span>
+                    <span class="stat-value" id="statStreams">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Words</span>
+                    <span class="stat-value" id="statWords">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Uptime</span>
+                    <span class="stat-value" id="statUptime">0:00</span>
+                </div>
+            </div>
+
+            <div>
+                <h3>Performance</h3>
+                <div class="stat-row">
+                    <span class="stat-label">Event Loop Lag</span>
+                    <span class="stat-value" id="statLoopLag">—</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Thread Dispatch</span>
+                    <span class="stat-value" id="statDispatch">—</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Active Threads</span>
+                    <span class="stat-value" id="statThreads">—</span>
+                </div>
+            </div>
+
+            <div>
+                <h3>Loop Lag History</h3>
+                <div class="latency-chart" id="lagChart"></div>
+            </div>
+
+            <div>
+                <span class="debug-toggle" onclick="toggleDebug()">Show Raw Debug</span>
+                <div class="debug-panel" id="debugPanel"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===================================================================
+        // State
+        // ===================================================================
+        const streams = new Map(); // id -> { ws, audioCtx, worklet, mediaStream, el, wordCount }
+        let streamCounter = 0;
+        let lagHistory = [];
+        const LAG_CHART_BARS = 40;
+
+        // Init lag chart
+        (function initLagChart() {
+            const chart = document.getElementById('lagChart');
+            for (let i = 0; i < LAG_CHART_BARS; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'latency-bar good';
+                bar.style.height = '0px';
+                chart.appendChild(bar);
+            }
+        })();
+
+        // Poll debug info
+        setInterval(pollDebugInfo, 1500);
+
+        // ===================================================================
+        // Stream management
+        // ===================================================================
+        async function addStream() {
+            let mediaStream;
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true }
+                });
+            } catch (e) {
+                alert('Microphone access denied.');
+                return;
+            }
+
+            streamCounter++;
+            const id = `stream-${streamCounter}`;
+
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('stopAllBtn').disabled = false;
+
+            // Create panel
+            const panel = document.createElement('div');
+            panel.className = 'stream-panel';
+            panel.id = `panel-${id}`;
+            panel.innerHTML = `
+                <div class="stream-header">
+                    <div class="stream-header-left">
+                        <span class="stream-title">Stream ${streamCounter}</span>
+                        <span class="stream-status active" id="status-${id}">connecting...</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span class="stream-stats" id="stats-${id}">0 words</span>
+                        <button class="btn btn-danger btn-sm" onclick="stopStream('${id}')">Stop</button>
+                    </div>
+                </div>
+                <div class="stream-body" id="body-${id}"></div>
+            `;
+            document.getElementById('streamsArea').appendChild(panel);
+
+            // Connect WebSocket
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${location.host}/ws/transcribe`);
+            ws.binaryType = 'arraybuffer';
+
+            const state = { ws, mediaStream, audioCtx: null, worklet: null, el: panel, wordCount: 0, startTime: Date.now() };
+            streams.set(id, state);
+
+            ws.onopen = async () => {
+                document.getElementById(`status-${id}`).textContent = 'live';
+                document.getElementById(`status-${id}`).className = 'stream-status active';
+
+                // Set up audio capture
+                const audioCtx = new AudioContext({ sampleRate: 16000 });
+                const source = audioCtx.createMediaStreamSource(mediaStream);
+                await audioCtx.audioWorklet.addModule('/static/audio-processor.js');
+                const worklet = new AudioWorkletNode(audioCtx, 'audio-processor');
+                source.connect(worklet);
+                worklet.connect(audioCtx.destination);
+
+                state.audioCtx = audioCtx;
+                state.worklet = worklet;
+
+                let buffer = new Int16Array(0);
+                worklet.port.onmessage = (event) => {
+                    if (ws.readyState !== WebSocket.OPEN) return;
+                    const current = new Int16Array(event.data.audio_data);
+                    const merged = new Int16Array(buffer.length + current.length);
+                    merged.set(buffer, 0);
+                    merged.set(current, buffer.length);
+                    buffer = merged;
+
+                    if ((buffer.length / 16000) * 1000 >= 100) {
+                        const samples = Math.floor(16000 * 0.1);
+                        const send = new Uint8Array(buffer.subarray(0, samples).buffer);
+                        buffer = buffer.subarray(samples);
+                        ws.send(send);
+                    }
+                };
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'transcript') {
+                    renderTranscript(id, msg.data);
+                }
+            };
+
+            ws.onclose = () => {
+                const statusEl = document.getElementById(`status-${id}`);
+                if (statusEl) {
+                    statusEl.textContent = 'closed';
+                    statusEl.className = 'stream-status';
+                }
+            };
+
+            ws.onerror = () => {
+                const statusEl = document.getElementById(`status-${id}`);
+                if (statusEl) {
+                    statusEl.textContent = 'error';
+                    statusEl.className = 'stream-status error';
+                }
+            };
+
+            updateStreamCount();
+        }
+
+        function stopStream(id) {
+            const state = streams.get(id);
+            if (!state) return;
+
+            if (state.worklet) state.worklet.disconnect();
+            if (state.audioCtx) state.audioCtx.close();
+            if (state.mediaStream) state.mediaStream.getTracks().forEach(t => t.stop());
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ type: 'stop' }));
+                state.ws.close();
+            }
+
+            streams.delete(id);
+            const panel = document.getElementById(`panel-${id}`);
+            if (panel) panel.remove();
+
+            updateStreamCount();
+            if (streams.size === 0) {
+                document.getElementById('emptyState').style.display = '';
+                document.getElementById('stopAllBtn').disabled = true;
+            }
+        }
+
+        function stopAll() {
+            for (const id of [...streams.keys()]) {
+                stopStream(id);
+            }
+        }
+
+        function updateStreamCount() {
+            document.getElementById('statStreams').textContent = streams.size;
+        }
+
+        // ===================================================================
+        // Transcript rendering
+        // ===================================================================
+        function renderTranscript(streamId, data) {
+            const body = document.getElementById(`body-${streamId}`);
+            if (!body) return;
+
+            const text = data.transcript || data.text || '';
+            const isFinal = data.end_of_turn || false;
+            const turnOrder = data.turn_order || data.audio_start || 0;
+            const words = data.words || [];
+
+            if (!text.trim()) return;
+
+            // Update word count
+            const state = streams.get(streamId);
+            if (state && isFinal) {
+                const wc = words.length || text.split(/\s+/).filter(w => w).length;
+                state.wordCount += wc;
+                document.getElementById(`stats-${streamId}`).textContent = `${state.wordCount} words`;
+            }
+
+            // Find or create utterance element
+            let div = body.querySelector(`.utterance[data-turn="${turnOrder}"]`);
+
+            if (div && !isFinal) {
+                div.querySelector('.utext').textContent = text;
+                body.scrollTop = body.scrollHeight;
+                return;
+            }
+            if (div && isFinal) div.remove();
+
+            div = document.createElement('div');
+            div.className = `utterance ${isFinal ? 'final' : 'interim'}`;
+            div.setAttribute('data-turn', turnOrder);
+
+            const textEl = document.createElement('span');
+            textEl.className = 'utext';
+            textEl.textContent = text;
+            div.appendChild(textEl);
+
+            if (isFinal) {
+                const meta = document.createElement('div');
+                meta.className = 'utterance-meta';
+                const wc = words.length || text.split(/\s+/).length;
+                meta.textContent = `${wc} words`;
+                div.appendChild(meta);
+            }
+
+            body.appendChild(div);
+            body.scrollTop = body.scrollHeight;
+
+            // Update global word count
+            updateGlobalStats();
+        }
+
+        function updateGlobalStats() {
+            let total = 0;
+            for (const s of streams.values()) total += s.wordCount;
+            document.getElementById('statWords').textContent = total;
+        }
+
+        // ===================================================================
+        // Debug polling
+        // ===================================================================
+        let debugVisible = false;
+
+        async function pollDebugInfo() {
+            try {
+                const res = await fetch('/debug/info');
+                const d = await res.json();
+
+                // Loop lag
+                const lag = d.event_loop_lag_ms;
+                const lagEl = document.getElementById('statLoopLag');
+                lagEl.textContent = `${lag.toFixed(1)}ms`;
+                lagEl.className = `stat-value ${lag > 100 ? 'critical' : lag > 10 ? 'warning' : 'good'}`;
+
+                // Dispatch
+                const disp = d.thread_dispatch_ms;
+                const dispEl = document.getElementById('statDispatch');
+                dispEl.textContent = `${disp.toFixed(1)}ms`;
+                dispEl.className = `stat-value ${disp > 100 ? 'critical' : disp > 10 ? 'warning' : 'good'}`;
+
+                // Threads
+                document.getElementById('statThreads').textContent = d.active_threads;
+
+                // Uptime
+                const mins = Math.floor(d.uptime_s / 60);
+                const secs = Math.floor(d.uptime_s % 60);
+                document.getElementById('statUptime').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+                // Health dot
+                const dot = document.getElementById('healthDot');
+                const htxt = document.getElementById('healthText');
+                if (lag > 100) {
+                    dot.className = 'health-dot critical';
+                    htxt.textContent = `Degraded (${lag.toFixed(0)}ms lag)`;
+                } else if (lag > 10) {
+                    dot.className = 'health-dot warning';
+                    htxt.textContent = `Elevated (${lag.toFixed(0)}ms lag)`;
+                } else if (streams.size > 0) {
+                    dot.className = 'health-dot good';
+                    htxt.textContent = 'Healthy';
+                } else {
+                    dot.className = 'health-dot';
+                    htxt.textContent = 'Idle';
+                }
+
+                // Lag chart
+                lagHistory.push(lag);
+                if (lagHistory.length > LAG_CHART_BARS) lagHistory.shift();
+                updateLagChart();
+
+                // Debug panel
+                if (debugVisible) {
+                    document.getElementById('debugPanel').textContent = JSON.stringify(d, null, 2);
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function updateLagChart() {
+            const bars = document.querySelectorAll('#lagChart .latency-bar');
+            const max = Math.max(...lagHistory, 5);
+            lagHistory.forEach((v, i) => {
+                const h = (v / max) * 28;
+                bars[i].style.height = `${Math.max(h, 1)}px`;
+                bars[i].className = `latency-bar ${v > 100 ? 'critical' : v > 10 ? 'warning' : 'good'}`;
+            });
+        }
+
+        function toggleDebug() {
+            debugVisible = !debugVisible;
+            document.getElementById('debugPanel').className = `debug-panel ${debugVisible ? 'visible' : ''}`;
+        }
+    </script>
+</body>
+</html>
