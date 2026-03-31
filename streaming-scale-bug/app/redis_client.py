@@ -1,8 +1,7 @@
 """Redis client for storing transcript history.
 
 We use a sync Redis client here because our Redis operations are simple
-key-value writes that complete in <1ms.  The FastAPI endpoints that need
-Redis wrap calls with ``asyncify`` from utils.py.
+key-value writes that complete in <1ms.
 """
 
 import json

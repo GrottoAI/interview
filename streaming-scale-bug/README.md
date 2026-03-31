@@ -55,8 +55,7 @@ uv sync
 REDIS_URL=redis://localhost:16379 TRANSCRIBER_URL=ws://localhost:9001 uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-Running locally with the same number of streams should work without issues,
-since your machine has full CPU resources.
+Running locally with the same number of streams should work without issues.
 
 ### Load testing with the script
 
@@ -68,10 +67,10 @@ included load test script to stream an audio file:
 uv pip install websockets httpx
 
 # Stream 1 session (should work fine)
-python test_stream.py -n 1
+uv run --with websockets --with httpx test_stream.py -n 1
 
 # Stream 5 sessions (triggers the bug in Docker)
-python test_stream.py -n 5
+uv run --with websockets --with httpx test_stream.py -n 5
 ```
 
 The script decodes `audio_bria.mp3` to PCM and streams it over WebSocket,
