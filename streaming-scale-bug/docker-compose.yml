@@ -1,7 +1,7 @@
 services:
   app:
     build: ./app
-    cpus: "0.25"
+    cpus: 0.25
     mem_limit: 512m
     ports:
       - "8000:8000"
